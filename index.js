@@ -10,7 +10,7 @@ const app = express()
 app.set("view engine","ejs")
 app.set("views","views")
 
-app.use(session({secret: 'secretpass'}))
+app.use(session({secret: 'secretpass', resave: false, saveUninitialized: false}))
 app.use(express.urlencoded({extended: true}))
 
 const mongoConnect = async() => {
@@ -21,9 +21,16 @@ const mongoConnect = async() => {
 
 mongoConnect()
 
+const requiredLoginMiddleware = (req, res, next) => {
+    if (!req.session.user_id){
+        res.redirect("/login")
+    } else {
+        next()
+    }
+}
 app.get('/register', (req,res) => {
     console.log(req.session.user_id)
-    if(session.user_id){
+    if(req.session.user_id){
         res.send("You're already registered.")
     }
     else{
@@ -38,18 +45,21 @@ app.post('/register', async (req,res)=>{
         username: username,
         pass: passwordHashed    
     })
-    
+    const userExists = await User.findOne({username})
+    console.log(userExists)
+    if (!userExists){
     req.session.user_id=user._id
-    console.log(req.session.user_id)
-    console.log(user)
-    console.log(req.session.user_id)
     user.save()
     res.send("You're registered.")
+    }
+    else{
+        res.send("User already exists.")
+    }
 })
 
 app.get('/login', (req,res) => {
     if(req.session.user_id){
-    res.send("You're logged")
+    res.redirect("/result")
     }
     else{
     res.render("login")
@@ -65,17 +75,26 @@ app.post('/login', async(req,res) => {
         isLogged = validPassword ? true : false
         if (isLogged){
             req.session.user_id=10
-            req.session.save()
-            console.log("Logged in")
-            console.log(req.session.user_id)
+            res.redirect("/result")
         }else{
-            console.log("Contraseña incorrecta")
+            res.send("Contraseña incorrecta")
         }
     }
     else{
-        console.log("Usuario incorrecto")
+        res.send("Usuario incorrecto")
     }
 })
+
+app.get("/logout", requiredLoginMiddleware, (req, res) => {
+req.session.user_id=null
+// o req.session.destroy()
+res.redirect("/login")
+})
+
+app.get("/result", requiredLoginMiddleware, (req, res) => {
+        res.send("You're logged!")
+})
+
 app.listen(3000, () => {
     console.log("App running on port 3000.")
 })
